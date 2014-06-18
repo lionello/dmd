@@ -16,12 +16,14 @@ import ddmd.arraytypes;
 import ddmd.builtin;
 import ddmd.complex;
 import ddmd.ctfeexpr;
+import ddmd.dcast;
 import ddmd.declaration;
 import ddmd.dstruct;
 import ddmd.errors;
 import ddmd.expression;
 import ddmd.func;
 import ddmd.globals;
+import ddmd.intrange;
 import ddmd.mtype;
 import ddmd.root.longdouble;
 import ddmd.root.port;
@@ -947,7 +949,7 @@ extern (C++) UnionExp Identity(TOK op, Loc loc, Type type, Expression e1, Expres
     return ue;
 }
 
-static bool integerCmp(bool anyunsigned, TOK op, sinteger_t n1, sinteger_t n2)
+static int integerCmp(bool anyunsigned, TOK op, sinteger_t n1, sinteger_t n2)
 {
     /* Do an unsigned comparison if any of the integers is unsigned. */
     if (anyunsigned)
@@ -1008,17 +1010,17 @@ extern (C++) UnionExp Cmp(TOK op, Loc loc, Type type, Expression e1, Expression 
     {
         /* Use VRP to determine whether the comparison is always true or false. */
         bool anyunsigned = (e1.type.isunsigned() || e2.type.isunsigned());
-        IntRange r1 = getIntRange(e1);
-        IntRange r2 = getIntRange(e2);
+        IntRange ir1 = getIntRange(e1);
+        IntRange ir2 = getIntRange(e2);
         switch (op)
          {
             case TOKul:
             case TOKule:
             case TOKlt:
             case TOKle:
-                if (integerCmp(anyunsigned, r1.imax.value, op, r2.imin.value))
+                if (integerCmp(anyunsigned, op, ir1.imax.value, ir2.imin.value))
                     n = 1;
-                else if (integerCmp(anyunsigned, r1.imin.value, op, r2.imax.value))
+                else if (integerCmp(anyunsigned, op, ir1.imin.value, ir2.imax.value))
                 {
                     emplaceExp!(CTFEExp)(&ue, TOKcantexp);
                     return ue;
@@ -1031,9 +1033,9 @@ extern (C++) UnionExp Cmp(TOK op, Loc loc, Type type, Expression e1, Expression 
             case TOKuge:
             case TOKgt:
             case TOKge:
-                if (integerCmp(anyunsigned, r1.imin.value, op, r2.imax.value))
+                if (integerCmp(anyunsigned, op, ir1.imin.value, ir2.imax.value))
                     n = 1;
-                else if (integerCmp(anyunsigned, r1.imax.value, op, r2.imin.value))
+                else if (integerCmp(anyunsigned, op, ir1.imax.value, ir2.imin.value))
                 {
                     emplaceExp!(CTFEExp)(&ue, TOKcantexp);
                     return ue;

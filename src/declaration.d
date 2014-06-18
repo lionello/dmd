@@ -975,6 +975,19 @@ public:
 
 /***********************************************************
  */
+struct IntRangeList
+{
+    this(SignExtendedNumber lower, SignExtendedNumber upper, IntRangeList *n = null)
+    {
+        range = IntRange(lower, upper);
+        next = n;
+    }
+    IntRange range;
+    IntRangeList* next;
+}
+
+/***********************************************************
+ */
 extern (C++) class VarDeclaration : Declaration
 {
 public:
@@ -1004,7 +1017,7 @@ public:
     // dtor calls on postblitted vars
     VarDeclaration rundtor;
     Expression edtor;               // if !=null, does the destruction of the variable
-    IntRange* range;                // if !=null, the variable is known to be within the range
+    IntRangeList* rangeStack;       // if !=null, the variable is known to be within the range
 
     final extern (D) this(Loc loc, Type type, Identifier id, Initializer _init)
     {

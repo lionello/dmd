@@ -70,6 +70,7 @@ import ddmd.traits;
 import ddmd.typinf;
 import ddmd.utf;
 import ddmd.visitor;
+import ddmd.conditionvisitor;
 
 enum LOGSEMANTIC = false;
 void emplaceExp(T : Expression, Args...)(void* p, Args args)
@@ -15026,9 +15027,12 @@ public:
             }
         }
 
+        scope ConditionVisitor v = new ConditionVisitor();
+        e1.accept(v);
         e2 = e2.semantic(sc);
         sc.mergeCallSuper(loc, cs1);
         e2 = resolveProperties(sc, e2);
+        v.popRanges();//should not be here; move to scope?
 
         auto f1 = checkNonAssignmentArrayOp(e1);
         auto f2 = checkNonAssignmentArrayOp(e2);

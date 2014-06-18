@@ -3556,8 +3556,8 @@ extern (C++) IntRange getIntRange(Expression e)
         {
             Expression ie;
             VarDeclaration vd = e.var.isVarDeclaration();
-            if (vd && vd.range)
-                range = vd.range._cast(e.type);
+            if (vd && vd.rangeStack)
+                range = vd.rangeStack.range._cast(e.type);
             else if (vd && vd._init && !vd.type.isMutable() && (ie = vd.getConstInitializer()) !is null)
                 ie.accept(this);
             else

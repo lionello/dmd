@@ -55,6 +55,7 @@ import ddmd.staticassert;
 import ddmd.target;
 import ddmd.tokens;
 import ddmd.visitor;
+import ddmd.conditionvisitor;
 
 extern (C++) Identifier fixupLabelName(Scope* sc, Identifier ident)
 {
@@ -2411,7 +2412,7 @@ public:
                                     p.type.toChars(), ta.dim.toInteger());
                                 goto Lerror2;
                             }
-                            key.range = new IntRange(SignExtendedNumber(0), dimrange.imax);
+                            key.rangeStack = new IntRangeList(SignExtendedNumber(0), dimrange.imax);
                         }
                     }
                     else
@@ -2515,7 +2516,7 @@ public:
                     Parameter p = (*parameters)[0];
                     if ((p.storageClass & STCref) && p.type.equals(key.type))
                     {
-                        key.range = null;
+                        key.rangeStack = null;
                         auto v = new AliasDeclaration(loc, p.ident, key);
                         _body = new CompoundStatement(loc, new ExpStatement(loc, v), _body);
                     }
@@ -2525,11 +2526,11 @@ public:
                         auto v = new VarDeclaration(loc, p.type, p.ident, ei);
                         v.storage_class |= STCforeach | (p.storageClass & STCref);
                         _body = new CompoundStatement(loc, new ExpStatement(loc, v), _body);
-                        if (key.range && !p.type.isMutable())
+                        if (key.rangeStack && !p.type.isMutable())
                         {
                             /* Limit the range of the key to the specified range
                              */
-                            v.range = new IntRange(key.range.imin, key.range.imax - SignExtendedNumber(1));
+                            v.rangeStack = new IntRangeList(key.rangeStack.range.imin, key.rangeStack.range.imax - SignExtendedNumber(1));
                         }
                     }
                 }
@@ -3210,7 +3211,7 @@ public:
         SignExtendedNumber upper = getIntRange(upr).imax;
         if (lower <= upper)
         {
-            key.range = new IntRange(lower, upper);
+            key.rangeStack = new IntRangeList(lower, upper);
         }
         Identifier id = Identifier.generateId("__limit");
         ie = new ExpInitializer(loc, (op == TOKforeach) ? upr : lwr);
@@ -3266,7 +3267,7 @@ public:
         }
         if ((prm.storageClass & STCref) && prm.type.equals(key.type))
         {
-            key.range = null;
+            key.rangeStack = null;
             auto v = new AliasDeclaration(loc, prm.ident, key);
             _body = new CompoundStatement(loc, new ExpStatement(loc, v), _body);
         }
@@ -3276,11 +3277,11 @@ public:
             auto v = new VarDeclaration(loc, prm.type, prm.ident, ie);
             v.storage_class |= STCtemp | STCforeach | (prm.storageClass & STCref);
             _body = new CompoundStatement(loc, new ExpStatement(loc, v), _body);
-            if (key.range && !prm.type.isMutable())
+            if (key.rangeStack && !prm.type.isMutable())
             {
                 /* Limit the range of the key to the specified range
                  */
-                v.range = new IntRange(key.range.imin, key.range.imax - SignExtendedNumber(1));
+                v.rangeStack = new IntRangeList(key.rangeStack.range.imin, key.rangeStack.range.imax - SignExtendedNumber(1));
             }
         }
         if (prm.storageClass & STCref)
@@ -3395,22 +3396,31 @@ public:
         // where S is a struct that defines opCast!bool.
         condition = condition.toBoolean(scd);
 
-        // If we can short-circuit evaluate the if statement, don't do the
-        // semantic analysis of the skipped code.
-        // This feature allows a limited form of conditional compilation.
-        condition = condition.optimize(WANTvalue);
-
+        scope ConditionVisitor v = new ConditionVisitor();
+        condition.accept(v);
         ifbody = ifbody.semanticNoScope(scd);
         scd.pop();
+        v.popRanges();
 
         cs1 = sc.callSuper;
         fi1 = sc.fieldinit;
         sc.callSuper = cs0;
         sc.fieldinit = fi0;
         if (elsebody)
+        {
+            scope ConditionVisitor vi = new ConditionVisitor();
+            vi.invert = true;
+            condition.accept(vi);
             elsebody = elsebody.semanticScope(sc, null, null);
+            vi.popRanges();
+        }
         sc.mergeCallSuper(loc, cs1);
         sc.mergeFieldInit(loc, fi1);
+
+        // If we can short-circuit evaluate the if statement, don't do the
+        // semantic analysis of the skipped code.
+        // This feature allows a limited form of conditional compilation.
+        condition = condition.optimize(WANTvalue);
 
         if (condition.op == TOKerror ||
             (ifbody && ifbody.isErrorStatement()) ||

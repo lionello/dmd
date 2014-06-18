@@ -458,6 +458,13 @@ struct IntRange
                         imax > other.imax ? imax : other.imax);
     }
 
+    /// Compute the intersection of two ranges.
+    IntRange intersectWith(const ref IntRange other) const
+    {
+        return IntRange(imin > other.imin ? imin : other.imin,
+                        imax < other.imax ? imax : other.imax);
+    }
+
     void unionOrAssign(IntRange other, ref bool union_)
     {
         if (!union_ || imin > other.imin)
