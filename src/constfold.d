@@ -947,6 +947,15 @@ extern (C++) UnionExp Identity(TOK op, Loc loc, Type type, Expression e1, Expres
     return ue;
 }
 
+static bool integerCmp(bool anyunsigned, TOK op, sinteger_t n1, sinteger_t n2)
+{
+    /* Do an unsigned comparison if any of the integers is unsigned. */
+    if (anyunsigned)
+        return intUnsignedCmp(op, n1, n2);
+    else
+        return intSignedCmp(op, n1, n2);
+}
+
 extern (C++) UnionExp Cmp(TOK op, Loc loc, Type type, Expression e1, Expression e2)
 {
     UnionExp ue;
@@ -968,19 +977,24 @@ extern (C++) UnionExp Cmp(TOK op, Loc loc, Type type, Expression e1, Expression 
             rawCmp = cast(int)(es1.len - es2.len);
         n = specificCmp(op, rawCmp);
     }
-    else if (e1.isConst() != 1 || e2.isConst() != 1)
-    {
-        emplaceExp!(CTFEExp)(&ue, TOKcantexp);
-        return ue;
-    }
     else if (e1.type.isreal())
     {
+        if (e1.isConst() != 1 || e2.isConst() != 1)
+        {
+            emplaceExp!(CTFEExp)(&ue, TOKcantexp);
+            return ue;
+        }
         r1 = e1.toReal();
         r2 = e2.toReal();
         goto L1;
     }
     else if (e1.type.isimaginary())
     {
+        if (e1.isConst() != 1 || e2.isConst() != 1)
+        {
+            emplaceExp!(CTFEExp)(&ue, TOKcantexp);
+            return ue;
+        }
         r1 = e1.toImaginary();
         r2 = e2.toImaginary();
     L1:
@@ -990,16 +1004,69 @@ extern (C++) UnionExp Cmp(TOK op, Loc loc, Type type, Expression e1, Expression 
     {
         assert(0);
     }
+    else if (e1.isConst() != 1 || e2.isConst() != 1)
+    {
+        /* Use VRP to determine whether the comparison is always true or false. */
+        bool anyunsigned = (e1.type.isunsigned() || e2.type.isunsigned());
+        IntRange r1 = getIntRange(e1);
+        IntRange r2 = getIntRange(e2);
+        switch (op)
+         {
+            case TOKul:
+            case TOKule:
+            case TOKlt:
+            case TOKle:
+                if (integerCmp(anyunsigned, r1.imax.value, op, r2.imin.value))
+                    n = 1;
+                else if (integerCmp(anyunsigned, r1.imin.value, op, r2.imax.value))
+                {
+                    emplaceExp!(CTFEExp)(&ue, TOKcantexp);
+                    return ue;
+                }
+                else
+                    n = 0;
+                break;
+
+            case TOKug:
+            case TOKuge:
+            case TOKgt:
+            case TOKge:
+                if (integerCmp(anyunsigned, r1.imin.value, op, r2.imax.value))
+                    n = 1;
+                else if (integerCmp(anyunsigned, r1.imax.value, op, r2.imin.value))
+                {
+                    emplaceExp!(CTFEExp)(&ue, TOKcantexp);
+                    return ue;
+                }
+                else
+                    n = 0;
+                break;
+
+            case TOKleg:
+                n = 1;
+                break;
+
+            case TOKunord:
+                n = 0;
+                break;
+
+            case TOKue:
+            case TOKlg:
+                emplaceExp!(CTFEExp)(&ue, TOKcantexp);
+                return ue;
+
+            default:
+                assert(0);
+         }
+    }
     else
     {
         sinteger_t n1;
         sinteger_t n2;
         n1 = e1.toInteger();
         n2 = e2.toInteger();
-        if (e1.type.isunsigned() || e2.type.isunsigned())
-            n = intUnsignedCmp(op, n1, n2);
-        else
-            n = intSignedCmp(op, n1, n2);
+        bool anyunsigned = (e1.type.isunsigned() || e2.type.isunsigned());
+        n = integerCmp(anyunsigned, op, n1, n2);
     }
     emplaceExp!(IntegerExp)(&ue, loc, n, type);
     return ue;
